@@ -1,0 +1,39 @@
+- name: Release Configuration on Weblogic Server
+  gather_facts: false
+  hosts:
+    - "{{ work_on_hosts }}"
+    
+  tasks:
+
+    - name: Read wlst.sh Path From Weblogic Process
+      # You will read weblogic installation path from your weblogic processes to get wlst.sh path by bash command below.
+      ansible.builtin.shell: ps -ef | grep weblogic | grep -v grep | awk '{for(i=1;i<=NF;i++) if ($i ~ /^-Dweblogic.home=/) print substr($i, index($i, "=")+1)}'
+      args:
+        chdir: /wls
+      register: Oracle_Installation
+      become: true
+      become_user: “{{ weblogicUser }}”
+
+    - name: Set WLST Path Variable for Ansible
+      ansible.builtin.set_fact:
+        wlstToolPath: "{{ Oracle_Installation.stdout_lines[0] | dirname | dirname }}/oracle_common/common/bin/wlst.sh"
+ 
+    - name: Run WLST Script For Release Config
+      become: true
+      become_user: “{{ weblogicUser }}”
+      no_log: true
+      # WLST_PROPERTIES environment variable will use to ignore SSL errors while connecting admin console with t3s protocol.
+      environment:
+        WLST_PROPERTIES: "-Dweblogic.security.SSL.ignoreHostnameVerification=true -Dweblogic.security.TrustKeyStore=DemoTrust"
+      ansible.builtin.shell:
+      args:
+        cmd: "{{ wlstToolPath }}"
+        stdin: |
+          connect("{{ userName }}", "{{ console_pass }}", "t3://{{ inventory_hostname_short }}:{{ port }}")
+          cd('edit:/')
+          cancelEdit('y')
+          disconnect()
+          print "---------------------------------------------------------------------------------"
+          print " It Could Be Deploy New Package on the Server {{ inventory_hostname }} !"
+          print "---------------------------------------------------------------------------------"
+          exit()
